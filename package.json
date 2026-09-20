@@ -1,14 +1,21 @@
 {
     "name": "pdf-conversion-app",
     "version": "1.0.0",
-    "main": "convertPdfToJpegs.js",
+    "main": "dist/convertFolderOfPdfs.js",
     "scripts": {
-        "start": "node convertPdfToJpegs.js"
+        "build": "tsc",
+        "start": "node dist/convertFolderOfPdfs.js"
     },
     "dependencies": {
         "archiver": "^7.0.0",
         "gm": "^1.25.1",
         "pdf-parse": "^2.4.5",
         "pdf2pic": "^3.1.0"
+    },
+    "devDependencies": {
+        "@types/archiver": "^7.0.0",
+        "@types/gm": "^1.25.4",
+        "@types/node": "^22.20.4",
+        "typescript": "^7.0.2"
     }
 }

@@ -13,8 +13,9 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy the rest of your code
+# Copy the rest of your code and compile the TypeScript to dist/
 COPY . .
+RUN npm run build
 
 # By default, run a simple command (but we'll override this in `docker run`)
-CMD ["node", "convertPdfToJpegs.js"]
+CMD ["node", "dist/convertFolderOfPdfs.js"]

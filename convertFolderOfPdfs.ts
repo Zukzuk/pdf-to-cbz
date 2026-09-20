@@ -1,29 +1,15 @@
-/**
- * convertFolderOfPdfs.js
- *
- * Build:
-docker build -t pdf-converter .
- *
- * Run:
-docker run --rm -v "C:/HostTemp:/tmp" -v "C:\Users\davet\Downloads:/inPdfs" -v "C:\Users\davet\Downloads:/outCbz" pdf-converter node convertFolderOfPdfs.js "/inPdfs" "/outCbz"
- *
- * Or simply: docker compose run --rm converter
- *
- * Steps:
- *   1) Reads all .pdf files in <INPUT_PDF_FOLDER>.
- *   2) For each PDF:
- *      - Convert all pages to .jpg in a subfolder named after the PDF (without extension).
- *        Pages are scaled proportionally (never stretched) and each output image's
- *        aspect ratio is checked against its source page; a mismatch fails the PDF.
- *      - Zip that subfolder into a .cbz file in <OUTPUT_PDF_FOLDER>.
- *   3) Logs each page as it finishes, so progress is visible in real time.
- */
+// Converts every PDF in a folder to a .cbz of JPEG pages. Usage and details: see README.md
 
-const fs = require("fs");
-const path = require("path");
-const { fromPath } = require("pdf2pic");
-const archiver = require("archiver");
-const gm = require("gm").subClass({ imageMagick: false }); // same GraphicsMagick pdf2pic uses
+import fs from "fs";
+import path from "path";
+import { fromPath } from "pdf2pic";
+import archiver from "archiver";
+import gmLib from "gm";
+
+const gm = gmLib.subClass({ imageMagick: false }); // same GraphicsMagick pdf2pic uses
+
+type Convert = ReturnType<typeof fromPath>;
+type PdfPage = { page: number; width: number; height: number };
 
 // Pages are scaled proportionally so BOTH dimensions end up at least this size
 // (never stretched: a 2:3 page stays 2:3, a landscape spread stays wide).
@@ -38,7 +24,7 @@ const ASPECT_TOLERANCE = 0.005; // max relative aspect-ratio error (0.5%) vs. th
 const [,, inputFolder, baseOutputDir] = process.argv;
 
 if (!inputFolder || !baseOutputDir) {
-  console.error("\nUsage: node convertFolderOfPdfs.js <INPUT_PDF_FOLDER> <OUTPUT_FOLDER>\n");
+  console.error("\nUsage: node dist/convertFolderOfPdfs.js <INPUT_PDF_FOLDER> <OUTPUT_FOLDER>\n");
   process.exit(1);
 }
 
@@ -82,11 +68,9 @@ console.log(`Output folder: "${baseOutputDir}"`);
 })();
 
 /**
- * convertPdfToCbz
- * ---------------
  * Converts a single PDF to a series of images in a subfolder, then zips that subfolder to a .cbz file.
  */
-async function convertPdfToCbz(pdfFilePath, baseOutputDir) {
+async function convertPdfToCbz(pdfFilePath: string, baseOutputDir: string): Promise<void> {
   const pdfName = path.basename(pdfFilePath, path.extname(pdfFilePath));
   const outputSubfolder = path.join(baseOutputDir, pdfName);
 
@@ -130,11 +114,9 @@ async function convertPdfToCbz(pdfFilePath, baseOutputDir) {
 }
 
 /**
- * identifyPdfPages
- * ----------------
- * Returns [{ page, width, height }] for every page of the PDF (page is 1-based).
+ * Returns the size of every page of the PDF (page is 1-based).
  */
-function identifyPdfPages(pdfFilePath) {
+function identifyPdfPages(pdfFilePath: string): Promise<PdfPage[]> {
   return new Promise((resolve, reject) => {
     gm(pdfFilePath).identify("%p|%w|%h\n", (err, out) => {
       if (err) return reject(err);
@@ -143,7 +125,7 @@ function identifyPdfPages(pdfFilePath) {
         .filter(Boolean)
         .map(line => {
           const [page, width, height] = line.split("|").map(Number);
-          return { page, width, height };
+          return { page, width, height } as PdfPage;
         });
       if (pages.length === 0 || pages.some(p => !(p.page > 0 && p.width > 0 && p.height > 0))) {
         return reject(new Error(`Could not read page sizes from PDF: ${JSON.stringify(out)}`));
@@ -154,33 +136,30 @@ function identifyPdfPages(pdfFilePath) {
 }
 
 /**
- * imageSize
- * ---------
  * Returns the real pixel size of a rendered image.
  * (pdf2pic's own "size" field just echoes the requested width x height, so it can't be trusted.)
  */
-function imageSize(imagePath) {
+function imageSize(imagePath: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     gm(imagePath).size((err, size) => (err ? reject(err) : resolve(size)));
   });
 }
 
 /**
- * convertPages
- * ------------
  * Converts each page (CONCURRENCY at a time), verifies its aspect ratio against the
  * source page, and logs it the moment it finishes.
  */
-async function convertPages(convert, sourcePages) {
+async function convertPages(convert: Convert, sourcePages: PdfPage[]): Promise<void> {
   const total = sourcePages.length;
   const started = Date.now();
   let done = 0;
   let next = 0;
 
-  async function worker() {
+  async function worker(): Promise<void> {
     while (next < total) {
       const src = sourcePages[next++];
       const res = await convert(src.page);
+      if (!res.path) throw new Error(`Page ${src.page}: pdf2pic did not report an output path`);
       const out = await imageSize(res.path);
 
       const srcRatio = src.width / src.height;
@@ -212,11 +191,9 @@ async function convertPages(convert, sourcePages) {
 }
 
 /**
- * zipFolder
- * ---------
  * Zips an entire folder using `archiver` and saves it to outputZipPath.
  */
-async function zipFolder(folderPath, outputZipPath) {
+async function zipFolder(folderPath: string, outputZipPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outputZipPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
