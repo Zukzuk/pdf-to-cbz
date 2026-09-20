@@ -1,0 +1,19 @@
+# Run:   docker compose run --rm converter
+#
+# (`run` streams the per-page progress live; `up` works too but prefixes each line.)
+# Rebuild after changing package.json or the Dockerfile:  docker compose build
+#
+# Override the folders without editing this file, e.g. in PowerShell:
+#   $env:PDF_IN = "D:\comics\pdf"; $env:CBZ_OUT = "D:\comics\cbz"; docker compose run --rm converter
+
+services:
+  converter:
+    build: .
+    image: pdf-converter
+    command: node convertFolderOfPdfs.js /inPdfs /outCbz
+    volumes:
+      - ${PDF_IN:-C:/Users/davet/Downloads}:/inPdfs:ro
+      - ${CBZ_OUT:-C:/Users/davet/Downloads}:/outCbz
+      - ${HOST_TMP:-C:/HostTemp}:/tmp
+      # Use the local script so edits apply without rebuilding the image.
+      - ./convertFolderOfPdfs.js:/usr/src/app/convertFolderOfPdfs.js:ro
